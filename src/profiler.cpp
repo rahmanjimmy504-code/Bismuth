@@ -1,0 +1,154 @@
+#include "profiler.hpp"
+
+#ifdef BISMUTH_GLES_BACKEND
+
+// The desktop profiler is developer instrumentation, not part of Bismuth's
+// rendering optimization. It depends on desktop GL timer queries and keyboard
+// dispatcher hooks that are unavailable / inline on mobile, so keep the shared
+// instrumentation calls as zero-cost no-ops on the mobile renderer.
+namespace profiler {
+void functionPush(const char*) {}
+void functionPop() {}
+}
+
+#else
+
+#include <Geode/Geode.hpp>
+#include <unordered_map>
+#include <vector>
+#include "Geode/cocos/CCDirector.h"
+#include "common.hpp"
+#include "HotKey.hpp"
+
+#include <Geode/modify/CCKeyboardDispatcher.hpp>
+#include <Geode/modify/CCDisplayLinkDirector.hpp>
+#include <Geode/modify/CCDirector.hpp>
+#include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/LevelEditorLayer.hpp>
+#include <Geode/modify/CCSprite.hpp>
+
+using namespace geode::prelude;
+
+bool takeSnapshotNextFrame = false;
+bool isTakingSnapshot      = false;
+
+std::unordered_map<void*, i64> timeSpentInFunction;
+
+i64 lastFunctionTime;
+std::vector<void*> functionCallStack;
+
+DECLARE_HOTKEY(KEY_P, {
+    takeSnapshotNextFrame = true;
+});
+
+class $modify(MyCCDisplayLinkDirector, cocos2d::CCDisplayLinkDirector) {
+    void mainLoop() {
+        u64 processTime = 0;
+
+        if (takeSnapshotNextFrame) {
+            isTakingSnapshot = true;
+            takeSnapshotNextFrame = false;
+            timeSpentInFunction.clear();
+            glBeginQuery(GL_TIME_ELAPSED, 1);
+            processTime = getTime();
+        }
+
+        CCDisplayLinkDirector::mainLoop();
+        
+        if (isTakingSnapshot) {
+            isTakingSnapshot = false;
+
+            processTime = getTime() - processTime;
+
+            i64 gpuTime = 0;
+            glEndQuery(GL_TIME_ELAPSED);
+            glGetQueryObjecti64v(1, GL_QUERY_RESULT, &gpuTime);
+
+            std::vector<std::pair<void*, i64>> functionsTime;
+            for (auto pair : timeSpentInFunction)
+                functionsTime.push_back(pair);
+                
+            std::sort(
+                functionsTime.begin(),
+                functionsTime.end(),
+                [&](const std::pair<void*, i64>& a, const std::pair<void*, i64>& b) {
+                    return a.second < b.second;
+                }
+            );
+        
+            for (auto [name, time] : functionsTime)
+                geode::log::info("- {} : {}ms", (const char*)name, (double)time / 1000000.0);
+
+            geode::log::info("Rendering time: {}ms", (double)gpuTime / 1000000.0);
+            geode::log::info("Processing time: {}ms", (double)processTime / 1000000.0);
+        }
+    }
+};
+
+static void addToFunctionTime(void* name, u64 time) {
+    if (timeSpentInFunction.find(name) == timeSpentInFunction.end())
+        timeSpentInFunction[name] = time;
+    else
+        timeSpentInFunction[name] += time;
+}
+
+namespace profiler {
+
+void functionPush(const char* name) {
+    auto time = getTime();
+    if (!isTakingSnapshot)
+        return;
+    
+    if (!functionCallStack.empty()) 
+        addToFunctionTime(functionCallStack.back(), time - lastFunctionTime);
+    
+    functionCallStack.push_back((void*)name);
+    lastFunctionTime = getTime();
+}
+
+void functionPop() {
+    auto time = getTime();
+    if (!isTakingSnapshot)
+        return;
+    
+    if (!functionCallStack.empty()) 
+        addToFunctionTime(functionCallStack.back(), time - lastFunctionTime);
+    
+    functionCallStack.pop_back();
+    lastFunctionTime = getTime();
+}
+
+}
+
+#include <Geode/modify/CCSprite.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCSprite, updateTransform);
+_PROFILER_HOOK_VOID(cocos2d::CCSprite, setColor, const cocos2d::ccColor3B&);
+_PROFILER_HOOK_VOID(cocos2d::CCSprite, setOpacity, unsigned char);
+
+#include <Geode/modify/CCNodeRGBA.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCNodeRGBA, setColor, const cocos2d::ccColor3B&);
+_PROFILER_HOOK_VOID(cocos2d::CCNodeRGBA, updateDisplayedColor, const cocos2d::ccColor3B&);
+
+#include <Geode/modify/CCDisplayLinkDirector.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCDisplayLinkDirector, mainLoop);
+
+#include <Geode/modify/CCDirector.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCDirector, drawScene);
+
+#include <Geode/modify/CCScheduler.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCScheduler, update, float);
+
+#include <Geode/modify/CCScene.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCScene, visit);
+
+#include <Geode/modify/CCEGLView.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCEGLView, swapBuffers);
+
+#include <Geode/modify/CCSpriteBatchNode.hpp>
+_PROFILER_HOOK_VOID(cocos2d::CCSpriteBatchNode, draw);
+
+#include <Geode/modify/GJBaseGameLayer.hpp>
+_PROFILER_HOOK_VOID(GJBaseGameLayer, update, float);
+_PROFILER_HOOK_VOID(GJBaseGameLayer, visit);
+
+#endif

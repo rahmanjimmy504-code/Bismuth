@@ -1,0 +1,43 @@
+{
+  "geode": "5.10.1",
+  "gd": {
+    "android": "2.2081"
+  },
+  "id": "community.bismuth-android",
+  "name": "Bismuth Android (experimental)",
+  "version": "v0.1.2-android.1",
+  "developer": "Community Android port; upstream by IliasHDZ",
+  "description": "Unofficial Android GLES2 port of Bismuth for GD 2.2081. Experimental GPU assist with Geometry Dash's stock renderer retained for uncertain visuals.",
+  "dependencies": {
+    "geode.node-ids": ">=v1.20.0"
+  },
+  "tags": [
+    "performance"
+  ],
+  "links": {
+    "source": "https://github.com/iliasHDZ/Bismuth",
+    "community": "https://discord.gg/B6H6ZVJx9C"
+  },
+  "resources": {
+    "files": [
+      "resources/shaders/*.vert",
+      "resources/shaders/*.frag",
+      "resources/shaders/*.glsl",
+      "resources/shaders/*.h",
+      "resources/*.json"
+    ]
+  },
+  "settings": {
+    "enabled": {
+      "name": "Bismuth enabled",
+      "type": "bool",
+      "default": true
+    },
+    "mobile_gpu_debug": {
+      "name": "Mobile GPU-assist diagnostics",
+      "type": "bool",
+      "default": false,
+      "description": "Shows resolved-state classification, dirty-state activity, GPU uploads, and stock/GPU-assist status. Diagnostics add CPU overhead; leave disabled for performance testing."
+    }
+  }
+}
