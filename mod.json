@@ -5,7 +5,7 @@
   },
   "id": "community.bismuth-android",
   "name": "Bismuth Android (experimental)",
-  "version": "v0.1.2-android.1",
+  "version": "v0.1.2-alpha.1",
   "developer": "Community Android port; upstream by IliasHDZ",
   "description": "Unofficial Android GLES2 port of Bismuth for GD 2.2081. Experimental GPU assist with Geometry Dash's stock renderer retained for uncertain visuals.",
   "dependencies": {
